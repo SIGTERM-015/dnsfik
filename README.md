@@ -364,9 +364,12 @@ Based on the test suite, the service includes:
 - Validation of all DNS record configurations
 - Fault tolerance for network issues
 
-Current test coverage: [![codecov](https://codecov.io/gh/MarlBurroW/cloudflare-dns-swarm/branch/main/graph/badge.svg)](https://codecov.io/gh/MarlBurroW/cloudflare-dns-swarm)
-
 The project maintains a high test coverage to ensure reliability. All new contributions should include appropriate tests.
+
+To check test coverage locally:
+```bash
+yarn test:coverage-text
+```
 
 ## 🤝 Contributing
 
