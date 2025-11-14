@@ -125,6 +125,16 @@ describe("IPService", () => {
         "Network error"
       );
     });
+
+    it("should throw helpful error for IPv6 ENETUNREACH", async () => {
+      const netError: any = new Error("connect ENETUNREACH");
+      netError.code = "ENETUNREACH";
+      mockedAxios.get.mockRejectedValue(netError);
+
+      await expect(ipService.getPublicIPv6()).rejects.toThrow(
+        "IPv6 is not available in this Docker container"
+      );
+    });
   });
 
   describe("getPublicIP wrapper", () => {
