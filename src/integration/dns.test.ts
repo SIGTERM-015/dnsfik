@@ -14,9 +14,9 @@ jest.mock("dockerode");
 jest.mock("../services/docker.service", () => ({
   DockerService: {
     getInstance: jest.fn().mockReturnValue({
-      getService: jest.fn().mockReturnValue({
+      getContainer: jest.fn().mockReturnValue({
         inspect: jest.fn().mockResolvedValue({
-          Spec: { Labels: {} },
+          Config: { Labels: {} },
         }),
       }),
     }),
@@ -73,7 +73,7 @@ describe("DNS Service Default Values", () => {
     });
 
     (DockerService.getInstance as jest.Mock).mockReturnValue({
-      getService: mockGetService,
+      getContainer: mockGetService,
     });
 
     // Initialize services
@@ -90,7 +90,7 @@ describe("DNS Service Default Values", () => {
     // Utiliser mockGetService directement
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 

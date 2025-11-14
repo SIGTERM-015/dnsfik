@@ -67,7 +67,7 @@ describe("App", () => {
     );
     expect(mockLogger.info).toHaveBeenNthCalledWith(
       1,
-      "Starting Cloudflare DNS Swarm Manager",
+      "Starting dnsfik",
       {
         version: "1.0.0",
         environment: "test",

@@ -1,58 +1,58 @@
-# 🌐 Docker/Swarm Cloudflare DNS Manager (WIP)
+# 🌐 dnsfik
 
-A Node.js service that automatically manages DNS records in Cloudflare based on Docker events. It monitors both Docker containers and Swarm services for specific labels and updates corresponding DNS records.
+A Node.js service that automatically manages DNS records in Cloudflare based on Docker events. It monitors Docker containers for specific labels and updates corresponding DNS records automatically.
 
-[![Tests](https://github.com/MarlBurroW/cloudflare-dns-swarm/actions/workflows/tests.yml/badge.svg)](https://github.com/MarlBurroW/cloudflare-dns-swarm/actions/workflows/tests.yml)
-[![codecov](https://codecov.io/gh/MarlBurroW/cloudflare-dns-swarm/branch/main/graph/badge.svg)](https://codecov.io/gh/MarlBurroW/cloudflare-dns-swarm)
-[![Docker Build & Push](https://github.com/MarlBurroW/cloudflare-dns-swarm/actions/workflows/docker-build.yml/badge.svg)](https://github.com/MarlBurroW/cloudflare-dns-swarm/actions/workflows/docker-build.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/marlburrow/cloudflare-dns-swarm)](https://hub.docker.com/r/marlburrow/cloudflare-dns-swarm)
+[![CI](https://github.com/SIGTERM-015/dnsfik/actions/workflows/ci.yml/badge.svg)](https://github.com/SIGTERM-015/dnsfik/actions/workflows/ci.yml)
+[![Release](https://github.com/SIGTERM-015/dnsfik/actions/workflows/release.yml/badge.svg)](https://github.com/SIGTERM-015/dnsfik/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub release (latest by date)](https://img.shields.io/github/v/release/marlburrow/cloudflare-dns-swarm?logo=github)](https://github.com/marlburrow/cloudflare-dns-swarm/releases/latest)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/SIGTERM-015/dnsfik?logo=github)](https://github.com/SIGTERM-015/dnsfik/releases/latest)
+[![Docker Image](https://img.shields.io/badge/docker-ghcr.io-blue?logo=docker)](https://github.com/SIGTERM-015/dnsfik/pkgs/container/dnsfik)
 
 ## ✨ Features
 
-- 🔄 Automatic DNS record management based on Docker service labels
-- 👀 Real-time monitoring of both Docker containers and Swarm services events
+- 🔄 Automatic DNS record management based on Docker container labels
+- 👀 Real-time monitoring of Docker container events
 - 🏷️ Support for multiple DNS record types (A, AAAA, CNAME, MX, TXT)
 - 🚀 Public IP caching and validation
 - 💪 Fault-tolerant design with retry mechanisms
 - 🔗 Automatic DNS creation from Traefik labels (optional)
+- 🐳 Works with regular Docker (no Swarm required)
 
 ## 📋 Prerequisites
 
 - 📦 Node.js 20 or higher
-- 🐳 Docker (works in both Swarm and standalone mode)
+- 🐳 Docker (standalone mode)
 - ☁️ Cloudflare account and API token with DNS edit permissions
 - 🔌 Access to Docker socket (read-only is sufficient)
 
 ## 🚀 Installation
 
-### Quick Start with Docker Swarm
+### Quick Start with Docker
 
 ```bash
-# Create a config file for environment variables
-cat << EOF > cloudflare-dns.env
-CLOUDFLARE_TOKEN=your_cloudflare_api_token
-LOG_LEVEL=info
-EOF
-
-# Deploy the service to your swarm
-docker service create \
-  --name cloudflare-dns \
-  --env-file cloudflare-dns.env \
-  --mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock,ro \
-  --constraint 'node.role == manager' \
-  marlburrow/cloudflare-dns-swarm
+docker run -d \
+  --name dnsfik \
+  --restart unless-stopped \
+  -e CLOUDFLARE_TOKEN=your_cloudflare_api_token \
+  -e LOG_LEVEL=info \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  dnsfik
 ```
 
-Or using a stack file (for Portainer or `docker stack deploy`):
+**Note**: The container runs as root to access the Docker socket (similar to Traefik, Portainer, etc.).
+
+### Using Docker Compose
+
+Create a `docker-compose.yml` file:
 
 ```yaml
 version: "3.8"
 
 services:
   dns-manager:
-    image: marlburrow/cloudflare-dns-swarm:latest
+    image: dnsfik:latest
+    container_name: dnsfik
+    restart: unless-stopped
     environment:
       - CLOUDFLARE_TOKEN=your_cloudflare_api_token
       - LOG_LEVEL=info
@@ -61,33 +61,17 @@ services:
       - IP_CHECK_INTERVAL=3600000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        constraints:
-          - node.role == manager
-      resources:
-        limits:
-          memory: 256M
-        reservations:
-          memory: 128M
-      restart_policy:
-        condition: any
-        delay: 5s
-        max_attempts: 3
-        window: 120s
 ```
 
-Save this as `cloudflare-dns-stack.yml` and deploy:
+Then start the service:
 
 ```bash
-docker stack deploy -c cloudflare-dns-stack.yml cloudflare-dns
+docker compose up -d
 ```
 
 ## 📖 Usage
 
-Works with both Docker containers and Swarm services. Here are examples for both:
+Add DNS labels to your Docker containers to automatically manage DNS records:
 
 ### 🏷️ Available Labels
 
@@ -113,32 +97,20 @@ Example with minimal configuration:
 
 ```bash
 # Only hostname specified - creates an A record with public IP
-docker service create \
-  --name my-service \
-  --label dns.cloudflare.hostname=api.domain.com \
-  your-image
-```
-
-### 📦 Docker Container
-
-```bash
-# Create a container with DNS records
 docker run -d \
   --name my-container \
   --label dns.cloudflare.hostname=api.domain.com \
-  --label dns.cloudflare.type=A \
-  --label dns.cloudflare.proxied=false \
   your-image
 ```
 
-### 🐳 Docker Swarm Service
+### 📦 Docker Container Examples
 
 #### 🔹 Basic A Record
 
 ```bash
-# Create a service with an A record and custom TTL
-docker service create \
-  --name my-service \
+# Create a container with an A record and custom TTL
+docker run -d \
+  --name my-app \
   --label dns.cloudflare.hostname=subdomain.domain.com \
   --label dns.cloudflare.type=A \
   --label dns.cloudflare.ttl=3600 \
@@ -148,9 +120,9 @@ docker service create \
 #### 🔄 CNAME Record
 
 ```bash
-# Create a service with a CNAME record
-docker service create \
-  --name my-service \
+# Create a container with a CNAME record
+docker run -d \
+  --name my-app \
   --label dns.cloudflare.hostname=alias.domain.com \
   --label dns.cloudflare.type=CNAME \
   --label dns.cloudflare.content=target.domain.com \
@@ -161,9 +133,9 @@ docker service create \
 #### 🌐 IPv4 and IPv6 Records
 
 ```bash
-# Create a service with both A and AAAA records
-docker service create \
-  --name my-service \
+# Create a container with both A and AAAA records
+docker run -d \
+  --name my-app \
   --label dns.cloudflare.hostname=api.domain.com \
   --label dns.cloudflare.type=A \
   --label dns.cloudflare.proxied=true \
@@ -177,9 +149,9 @@ docker service create \
 #### 🏷️ Multiple Subdomains
 
 ```bash
-# Create a service with multiple subdomains
-docker service create \
-  --name my-service \
+# Create a container with multiple subdomains
+docker run -d \
+  --name my-app \
   --label dns.cloudflare.hostname=api.domain.com \
   --label dns.cloudflare.type=A \
   --label dns.cloudflare.hostname.admin=admin.domain.com \
@@ -193,9 +165,9 @@ docker service create \
 #### 🔀 Multiple Records
 
 ```bash
-# Create a service with mixed record types
-docker service create \
-  --name my-service \
+# Create a container with mixed record types
+docker run -d \
+  --name my-app \
   --label dns.cloudflare.hostname=domain.com \
   --label dns.cloudflare.type=A \
   --label dns.cloudflare.hostname.mx=domain.com \
@@ -213,14 +185,15 @@ The following environment variables can be used to configure the application:
 
 ### Core Settings
 
-| Variable            | Description                              | Default                | Required |
-| ------------------- | ---------------------------------------- | ---------------------- | -------- |
-| `CLOUDFLARE_TOKEN`  | Cloudflare API token                     | -                      | Yes      |
-| `DOCKER_SOCKET`     | Docker socket path                       | `/var/run/docker.sock` | No       |
-| `LOG_LEVEL`         | Logging level (debug, info, warn, error) | `info`                 | No       |
-| `RETRY_ATTEMPTS`    | Number of retry attempts                 | `3`                    | No       |
-| `RETRY_DELAY`       | Delay between retries (ms)               | `300000`               | No       |
-| `IP_CHECK_INTERVAL` | IP check interval (ms)                   | `3600000`              | No       |
+| Variable              | Description                              | Default                | Required |
+| --------------------- | ---------------------------------------- | ---------------------- | -------- |
+| `CLOUDFLARE_TOKEN`    | Cloudflare API token                     | -                      | Yes      |
+| `CLOUDFLARE_ZONE_ID`  | Cloudflare Zone ID (optional)            | -                      | No       |
+| `DOCKER_SOCKET`       | Docker socket path                       | `/var/run/docker.sock` | No       |
+| `LOG_LEVEL`           | Logging level (debug, info, warn, error) | `info`                 | No       |
+| `RETRY_ATTEMPTS`      | Number of retry attempts                 | `3`                    | No       |
+| `RETRY_DELAY`         | Delay between retries (ms)               | `300000`               | No       |
+| `IP_CHECK_INTERVAL`   | IP check interval (ms)                   | `3600000`              | No       |
 
 ### DNS Settings
 
@@ -238,6 +211,7 @@ The following environment variables can be used to configure the application:
 
 ```env
 CLOUDFLARE_TOKEN=your_token_here
+CLOUDFLARE_ZONE_ID=your_zone_id_here
 USE_TRAEFIK_LABELS=true
 DNS_DEFAULT_RECORD_TYPE=A
 DNS_DEFAULT_PROXIED=true
@@ -254,12 +228,12 @@ DNS_DEFAULT_TTL=3600
 
 ### 🔗 Traefik Integration
 
-The service can automatically create DNS records from your Traefik Host rules.
+The service can automatically create DNS records from your Traefik Host rules for your Docker containers.
 
 #### Important Notes
 
 - Traefik integration must be explicitly enabled with `USE_TRAEFIK_LABELS=true`
-- DNS records are only created for services with `traefik.enable=true`
+- DNS records are only created for containers with `traefik.enable=true`
 - DNS settings can be overridden using explicit dns.cloudflare.\* labels
 - Multiple hosts in a single rule are supported and will create separate DNS records
 - CNAME records require explicit content to be specified
@@ -328,8 +302,8 @@ If you want to contribute or modify the code:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/docker-swarm-dns-manager.git
-cd docker-swarm-dns-manager
+git clone https://github.com/SIGTERM-015/dnsfik.git
+cd dnsfik
 ```
 
 2. Copy `.env.example` to `.env` and fill in your Cloudflare credentials:
@@ -340,10 +314,14 @@ cp .env.example .env
 
 3. Install dependencies and start in development mode:
 
+**Option A: Local development**
 ```bash
 yarn install
 yarn dev
-# Or using docker-compose for development:
+```
+
+**Option B: Using docker-compose for development**
+```bash
 docker compose up -d
 ```
 
@@ -392,7 +370,17 @@ The project maintains a high test coverage to ensure reliability. All new contri
 
 ## 🤝 Contributing
 
-Contributions are welcome! Feel free to open an issue or pull request.
+Contributions are welcome! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) for details on:
+- 📦 Release process with semantic versioning
+- 🏷️ How to use labels to create releases
+- 🔄 Development workflow
+- ✅ Testing requirements
+
+Quick summary:
+1. Create a PR to `main`
+2. Add a label: `release:major`, `release:minor`, or `release:patch`
+3. Merge the PR
+4. 🎉 Automatic release and Docker image publication!
 
 ## 🗺️ Roadmap
 

@@ -45,9 +45,9 @@ describe("DNSService", () => {
 
     mockDocker = {
       getInstance: jest.fn().mockReturnThis(),
-      getService: jest.fn().mockReturnValue({
+      getContainer: jest.fn().mockReturnValue({
         inspect: jest.fn().mockResolvedValue({
-          Spec: {
+          Config: {
             Labels: {}, // Les labels seront fournis dans chaque test
           },
         }),
@@ -75,9 +75,9 @@ describe("DNSService", () => {
 
       mockCloudflare.getDNSRecord.mockResolvedValue(null);
 
-      mockDocker.getService.mockReturnValue({
+      mockDocker.getContainer.mockReturnValue({
         inspect: jest.fn().mockResolvedValue({
-          Spec: { Labels: labels },
+          Config: { Labels: labels },
         }),
       } as any);
 
@@ -103,9 +103,9 @@ describe("DNSService", () => {
         "dns.cloudflare.content": "5.6.7.8",
       };
 
-      mockDocker.getService.mockReturnValue({
+      mockDocker.getContainer.mockReturnValue({
         inspect: jest.fn().mockResolvedValue({
-          Spec: { Labels: labels },
+          Config: { Labels: labels },
         }),
       } as any);
 
@@ -161,9 +161,9 @@ describe("DNSService", () => {
         "dns.cloudflare.content.v6": "2001:db8::1",
       };
 
-      mockDocker.getService.mockReturnValue({
+      mockDocker.getContainer.mockReturnValue({
         inspect: jest.fn().mockResolvedValue({
-          Spec: { Labels: labels },
+          Config: { Labels: labels },
         }),
       } as any);
 
@@ -200,7 +200,7 @@ describe("DNSService", () => {
         "dns.cloudflare.type": "A",
       };
 
-      mockDocker.getService.mockReturnValue({
+      mockDocker.getContainer.mockReturnValue({
         inspect: jest.fn().mockRejectedValue(new Error("API Error")),
       } as any);
 

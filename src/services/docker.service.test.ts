@@ -1,7 +1,7 @@
 import { DockerService } from "./docker.service";
 import Docker from "dockerode";
 import { EventEmitter } from "events";
-import { Service, Container, ContainerInfo } from "dockerode";
+import { Container, ContainerInfo } from "dockerode";
 
 jest.mock("dockerode");
 
@@ -17,9 +17,7 @@ describe("DockerService", () => {
     mockEventStream = new EventEmitter();
     mockDocker = {
       getEvents: jest.fn().mockResolvedValue(mockEventStream),
-      listServices: jest.fn(),
       listContainers: jest.fn().mockResolvedValue([]),
-      getService: jest.fn(),
       getContainer: jest.fn(),
     } as any;
 
@@ -28,46 +26,7 @@ describe("DockerService", () => {
   });
 
   describe("startMonitoring", () => {
-    it("should scan existing services in Swarm mode", async () => {
-      const mockServices: Partial<Service>[] = [
-        {
-          Spec: {
-            Name: "service1",
-            Labels: {
-              "dns.cloudflare.hostname": "test1.domain.com",
-            },
-          },
-          modem: {},
-          id: "service1",
-        },
-        {
-          Spec: {
-            Name: "service2",
-            Labels: {
-              "dns.cloudflare.hostname": "test2.domain.com",
-            },
-          },
-        },
-      ];
-
-      mockDocker.listServices.mockResolvedValue(mockServices as Service[]);
-      mockDocker.listContainers.mockResolvedValue([]);
-
-      const dnsUpdateSpy = jest.fn();
-      dockerService.on("dns-update", dnsUpdateSpy);
-
-      await dockerService.startMonitoring();
-
-      expect(dnsUpdateSpy).toHaveBeenCalledTimes(2);
-      expect(dnsUpdateSpy).toHaveBeenCalledWith({
-        event: "update",
-        service: "service1",
-        labels: { "dns.cloudflare.hostname": "test1.domain.com" },
-      });
-    });
-
-    it("should scan existing containers in standalone mode", async () => {
-      mockDocker.listServices.mockRejectedValue(new Error("Not in swarm mode"));
+    it("should scan existing containers", async () => {
 
       const mockContainers: Partial<ContainerInfo>[] = [
         {
@@ -95,58 +54,13 @@ describe("DockerService", () => {
       await dockerService.startMonitoring();
 
       expect(dnsUpdateSpy).toHaveBeenCalledWith({
-        event: "update",
+        event: "start",
         service: "container1",
         labels: { "dns.cloudflare.hostname": "test1.domain.com" },
       });
     });
 
-    it("should handle service events", async () => {
-      await dockerService.startMonitoring();
-      mockDocker.listContainers.mockResolvedValue([]);
-
-      const dnsUpdateSpy = jest.fn();
-      dockerService.on("dns-update", dnsUpdateSpy);
-
-      const mockService = {
-        Spec: {
-          Name: "service1",
-          Labels: {
-            "dns.cloudflare.hostname": "test.domain.com",
-          },
-        },
-      };
-
-      mockDocker.getService.mockReturnValue({
-        inspect: jest.fn().mockResolvedValue(mockService),
-      } as any);
-
-      mockEventStream.emit(
-        "data",
-        Buffer.from(
-          JSON.stringify({
-            Type: "service",
-            Action: "update",
-            Actor: {
-              ID: "service1",
-              Attributes: {
-                name: "service1",
-              },
-            },
-          })
-        )
-      );
-
-      await Promise.resolve();
-
-      expect(dnsUpdateSpy).toHaveBeenCalledWith({
-        event: "update",
-        service: "service1",
-        labels: { "dns.cloudflare.hostname": "test.domain.com" },
-      });
-    });
-
-    it("should handle container events", async () => {
+    it("should handle container start events", async () => {
       await dockerService.startMonitoring();
       mockDocker.listContainers.mockResolvedValue([]);
 
@@ -191,6 +105,37 @@ describe("DockerService", () => {
         event: "start",
         service: "container1",
         labels: { "dns.cloudflare.hostname": "test.domain.com" },
+      });
+    });
+
+    it("should handle container stop/destroy events", async () => {
+      await dockerService.startMonitoring();
+      mockDocker.listContainers.mockResolvedValue([]);
+
+      const dnsRemoveSpy = jest.fn();
+      dockerService.on("dns-remove", dnsRemoveSpy);
+
+      mockEventStream.emit(
+        "data",
+        Buffer.from(
+          JSON.stringify({
+            Type: "container",
+            Action: "destroy",
+            Actor: {
+              ID: "container1",
+              Attributes: {
+                name: "container1",
+              },
+            },
+          })
+        )
+      );
+
+      await Promise.resolve();
+
+      expect(dnsRemoveSpy).toHaveBeenCalledWith({
+        event: "destroy",
+        service: "container1",
       });
     });
   });

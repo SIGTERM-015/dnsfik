@@ -23,12 +23,12 @@ describe("Service Integration", () => {
     // Setup le mock Docker
     mockGetService = jest.fn().mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: {} },
+        Config: { Labels: {} },
       }),
     });
 
     (DockerService.getInstance as jest.Mock).mockReturnValue({
-      getService: mockGetService,
+      getContainer: mockGetService,
     });
 
     // Reset singletons
@@ -75,7 +75,7 @@ describe("Service Integration", () => {
 
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 
@@ -101,7 +101,7 @@ describe("Service Integration", () => {
     // Setup le mock Docker
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 
