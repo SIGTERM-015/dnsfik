@@ -1,12 +1,16 @@
 import { Logger } from "./utils/logger";
 import { DockerService } from "./services/docker.service";
 import { DNSService } from "./services/dns.service";
+import { IPService } from "./services/ip.service";
+import { config } from "./config/config";
 import Table from "cli-table3";
 
 export class Application {
   private logger = Logger.getInstance();
   private dockerService = DockerService.getInstance();
   private dnsService = DNSService.getInstance();
+  private ipService = IPService.getInstance();
+  private ipCheckInterval?: NodeJS.Timeout;
 
   private displayConfigSummary(): void {
     const table = new Table({
@@ -44,12 +48,34 @@ export class Application {
         "Processing Interval",
         `${process.env.TASK_PROCESSING_INTERVAL || "5000"}ms`,
       ],
+      [
+        "IP Check Interval",
+        `${config.app.ipCheckInterval}ms (${config.app.ipCheckInterval / 1000}s)`,
+      ],
       ["Log Level", process.env.LOG_LEVEL || "info"]
     );
 
     console.log("\n📋 dnsfik Configuration:");
     console.log(table.toString());
     console.log(); // Empty line after table
+  }
+
+  private startIPMonitoring(): void {
+    const intervalMs = config.app.ipCheckInterval;
+    
+    this.logger.info("Starting IP monitoring", {
+      intervalMs,
+      intervalMinutes: Math.round(intervalMs / 60000),
+    });
+
+    this.ipCheckInterval = setInterval(async () => {
+      try {
+        this.logger.debug("Checking for IP address changes...");
+        await this.dnsService.checkAndUpdateIPAddresses();
+      } catch (error) {
+        this.logger.error("Failed to check IP addresses", { error });
+      }
+    }, intervalMs);
   }
 
   public async start(): Promise<void> {
@@ -76,6 +102,9 @@ export class Application {
 
       await this.dockerService.startMonitoring();
 
+      // Start periodic IP monitoring
+      this.startIPMonitoring();
+
       this.logger.info("Application started successfully");
 
       process.on("SIGTERM", () => this.shutdown());
@@ -88,6 +117,12 @@ export class Application {
 
   private async shutdown(): Promise<void> {
     this.logger.info("Shutting down application...");
+    
+    if (this.ipCheckInterval) {
+      clearInterval(this.ipCheckInterval);
+      this.logger.debug("IP check interval cleared");
+    }
+    
     process.exit(0);
   }
 }

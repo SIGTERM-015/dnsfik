@@ -38,6 +38,57 @@ services:
       "dns.cloudflare.type.v6": "AAAA"
       "dns.cloudflare.content.v6": "2001:db8::1"
 
+  # Test service with explicit public_ip keyword
+  test-public-ip:
+    image: traefik/whoami
+    container_name: test-public-ip
+    labels:
+      "traefik.enable": "true"
+      "traefik.http.routers.test-public-ip.rule": "Host(`test-public-ip.${DOMAIN:-example.com}`)"
+      "traefik.http.routers.test-public-ip.entrypoints": "websecure"
+      "traefik.http.routers.test-public-ip.tls": "true"
+      "dns.cloudflare.content": "public_ip"
+      "dns.cloudflare.type": "A"
+      "dns.cloudflare.proxied": "false"
+
+  # Test service without content label (should auto-fetch public IP)
+  test-auto-ip:
+    image: traefik/whoami
+    container_name: test-auto-ip
+    labels:
+      "traefik.enable": "true"
+      "traefik.http.routers.test-auto-ip.rule": "Host(`test-auto-ip.${DOMAIN:-example.com}`)"
+      "traefik.http.routers.test-auto-ip.entrypoints": "websecure"
+      "traefik.http.routers.test-auto-ip.tls": "true"
+      "dns.cloudflare.type": "A"
+      "dns.cloudflare.proxied": "false"
+      # No content label - should use public IP automatically
+
+  # Test service with IPv6 and public_ip
+  test-ipv6:
+    image: traefik/whoami
+    container_name: test-ipv6
+    labels:
+      "traefik.enable": "true"
+      "traefik.http.routers.test-ipv6.rule": "Host(`test-ipv6.${DOMAIN:-example.com}`)"
+      "traefik.http.routers.test-ipv6.entrypoints": "websecure"
+      "traefik.http.routers.test-ipv6.tls": "true"
+      "dns.cloudflare.hostname": "test-ipv6.${DOMAIN:-example.com}"
+      "dns.cloudflare.type": "AAAA"
+      "dns.cloudflare.content": "public_ip"
+      "dns.cloudflare.proxied": "false"
+
+  # Test service with Traefik labels only (no explicit DNS labels)
+  test-traefik-only:
+    image: traefik/whoami
+    container_name: test-traefik-only
+    labels:
+      "traefik.enable": "true"
+      "traefik.http.routers.test-traefik-only.rule": "Host(`test-traefik.${DOMAIN:-example.com}`)"
+      "traefik.http.routers.test-traefik-only.entrypoints": "websecure"
+      "traefik.http.routers.test-traefik-only.tls": "true"
+      # Should extract hostname from Traefik and use public IP automatically
+
   dnsfik:
     image: node:20
     container_name: dnsfik
@@ -56,6 +107,7 @@ services:
       - DNS_DEFAULT_TTL=1
       - FORCE_COLOR=1
       - NODE_ENV=development
+      - IP_CHECK_INTERVAL=60000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - .:/app
