@@ -61,8 +61,8 @@ export class Application {
 
       this.displayConfigSummary();
 
-      await this.dockerService.startMonitoring();
-
+      // Register event listeners BEFORE starting monitoring
+      // so we don't miss events from initial container scan
       this.dockerService.on(
         "dns-update",
         (data: { event: string; service: string; labels: any }) => {
@@ -73,6 +73,8 @@ export class Application {
             });
         }
       );
+
+      await this.dockerService.startMonitoring();
 
       this.logger.info("Application started successfully");
 

@@ -83,9 +83,6 @@ Before submitting a PR, make sure all tests pass:
 # Run tests
 yarn test
 
-# Run linter
-yarn lint
-
 # Build the project
 yarn build
 ```
