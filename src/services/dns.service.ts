@@ -38,12 +38,12 @@ export class DNSService {
     serviceName: string,
     labels: { [key: string]: string }
   ): Promise<void> {
-    this.logger.debug("Handling service update", { serviceName, labels });
+    this.logger.debug("Handling container update", { serviceName, labels });
 
-    // Récupérer le service complet pour avoir tous les labels
-    const service = await this.docker.getService(serviceName);
-    const serviceSpec = await service.inspect();
-    const allLabels = serviceSpec.Spec.Labels || {};
+    // Récupérer le conteneur complet pour avoir tous les labels
+    const container = await this.docker.getContainer(serviceName);
+    const containerInfo = await container.inspect();
+    const allLabels = containerInfo.Config?.Labels || {};
 
     // Utiliser tous les labels pour la validation
     const dnsLabels = this.validator.validateServiceLabels(

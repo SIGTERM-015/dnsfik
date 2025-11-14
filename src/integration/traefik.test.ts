@@ -43,7 +43,7 @@ describe("Traefik Integration", () => {
 
     mockGetService = jest.fn().mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: {} },
+        Config: { Labels: {} },
       }),
     });
 
@@ -53,7 +53,7 @@ describe("Traefik Integration", () => {
     );
     (IPService.getInstance as jest.Mock).mockReturnValue(mockIPService);
     (DockerService.getInstance as jest.Mock).mockReturnValue({
-      getService: mockGetService,
+      getContainer: mockGetService,
     });
 
     // Activer Traefik
@@ -89,7 +89,7 @@ describe("Traefik Integration", () => {
 
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 
@@ -114,7 +114,7 @@ describe("Traefik Integration", () => {
 
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 
@@ -149,7 +149,7 @@ describe("Traefik Integration", () => {
 
     mockGetService.mockReturnValue({
       inspect: jest.fn().mockResolvedValue({
-        Spec: { Labels: labels },
+        Config: { Labels: labels },
       }),
     });
 

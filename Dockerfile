@@ -18,10 +18,6 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Ajouter l'utilisateur node au groupe docker
-RUN addgroup -S docker && \
-    addgroup node docker
-
 # Copier seulement package.json
 COPY package.json ./
 
@@ -35,6 +31,5 @@ COPY --from=builder /app/dist ./dist
 # Add Docker socket volume
 VOLUME /var/run/docker.sock
 
-USER node
-
+# Run as root to access Docker socket (like Traefik)
 CMD ["node", "dist/app.js"] 

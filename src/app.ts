@@ -47,22 +47,22 @@ export class Application {
       ["Log Level", process.env.LOG_LEVEL || "info"]
     );
 
-    console.log("\n📋 Cloudflare DNS Swarm Manager Configuration:");
+    console.log("\n📋 dnsfik Configuration:");
     console.log(table.toString());
     console.log(); // Empty line after table
   }
 
   public async start(): Promise<void> {
     try {
-      this.logger.info("Starting Cloudflare DNS Swarm Manager", {
+      this.logger.info("Starting dnsfik", {
         version: process.env.npm_package_version || "1.0.0",
         environment: process.env.NODE_ENV || "production",
       });
 
       this.displayConfigSummary();
 
-      await this.dockerService.startMonitoring();
-
+      // Register event listeners BEFORE starting monitoring
+      // so we don't miss events from initial container scan
       this.dockerService.on(
         "dns-update",
         (data: { event: string; service: string; labels: any }) => {
@@ -73,6 +73,8 @@ export class Application {
             });
         }
       );
+
+      await this.dockerService.startMonitoring();
 
       this.logger.info("Application started successfully");
 

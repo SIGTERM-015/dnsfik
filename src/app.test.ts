@@ -60,14 +60,16 @@ describe("App", () => {
     const app = new Application();
     await app.start();
 
-    expect(mockDockerService.startMonitoring).toHaveBeenCalled();
+    // Verify listener is registered before monitoring starts
     expect(mockDockerService.on).toHaveBeenCalledWith(
       "dns-update",
       expect.any(Function)
     );
+    expect(mockDockerService.startMonitoring).toHaveBeenCalled();
+    
     expect(mockLogger.info).toHaveBeenNthCalledWith(
       1,
-      "Starting Cloudflare DNS Swarm Manager",
+      "Starting dnsfik",
       {
         version: "1.0.0",
         environment: "test",

@@ -1,8 +1,25 @@
 {
-  "name": "cloudflare-dns-swarm-manager",
+  "name": "dnsfik",
   "version": "1.0.0",
   "main": "dist/app.js",
+  "author": {
+    "name": "SIGTERM",
+    "email": "me@sigterm.vodka",
+    "url": "https://github.com/SIGTERM-015"
+  },
+  "contributors": [
+    {
+      "name": "MarlBurroW",
+      "url": "https://github.com/MarlBurroW"
+    }
+  ],
+
   "license": "MIT",
+  "description": "Automatically manage Cloudflare DNS records based on Docker container labels",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SIGTERM-015/dnsfik.git"
+  },
   "scripts": {
     "build": "tsc",
     "start": "node dist/app.js",

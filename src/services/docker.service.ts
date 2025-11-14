@@ -22,20 +22,20 @@ export class DockerService extends EventEmitter {
 
   public async startMonitoring(): Promise<void> {
     try {
-      // Scanner les services existants au démarrage
-      await this.scanExistingServices();
+      // Scan existing containers at startup
+      await this.scanExistingContainers();
 
-      // Écouter les événements Swarm et conteneurs
+      // Listen to container events
       const eventStream = await this.docker.getEvents({
         filters: {
-          type: ["service", "container"],
-          event: ["create", "update", "remove"],
+          type: ["container"],
+          event: ["create", "start", "stop", "destroy", "die", "kill"],
         },
       });
 
       eventStream.on("data", (buffer) => {
         const event = JSON.parse(buffer.toString());
-        this.handleServiceEvent(event);
+        this.handleContainerEvent(event);
       });
 
       this.logger.info("Docker event monitoring started");
@@ -45,41 +45,9 @@ export class DockerService extends EventEmitter {
     }
   }
 
-  private async scanExistingServices(): Promise<void> {
+  private async scanExistingContainers(): Promise<void> {
     try {
-      // Essayer d'abord en mode Swarm
-      try {
-        const services = await this.docker.listServices({});
-        this.logger.debug("Found services in Swarm mode", {
-          count: services.length,
-          services: services.map((s) => s.Spec?.Name),
-          details: services.map((s) => ({
-            name: s.Spec?.Name,
-            labels: s.Spec?.Labels,
-          })),
-        });
-
-        for (const service of services) {
-          if (!service.Spec) continue;
-          const labels = service.Spec.Labels || {};
-          const dnsLabels = this.extractDNSLabels(labels);
-          if (dnsLabels) {
-            this.emit("dns-update", {
-              event: "update",
-              service: service.Spec.Name,
-              labels: dnsLabels,
-            });
-          }
-        }
-
-        this.logger.debug(
-          `Completed scanning ${services.length} Swarm services`
-        );
-      } catch (error) {
-        this.logger.debug("Not in Swarm mode or no services found", { error });
-      }
-
-      // Puis scanner les conteneurs en mode standard
+      // Scan all running containers
       const containers = await this.docker.listContainers();
       this.logger.debug(`Found ${containers.length} containers`, {
         containerNames: containers.map((c) => c.Names[0]),
@@ -105,80 +73,83 @@ export class DockerService extends EventEmitter {
           );
 
           this.emit("dns-update", {
-            event: "update",
+            event: "start",
             service: container.Names[0].replace(/^\//, ""),
             labels: dnsLabels,
           });
         }
       }
 
-      this.logger.debug(`Completed scanning ${containerCount} containers`);
+      this.logger.info(`Scanned ${containerCount} containers with DNS labels`);
     } catch (error) {
-      this.logger.error("Failed to scan services/containers", { error });
+      this.logger.error("Failed to scan containers", { error });
       throw error;
     }
   }
 
-  private async handleServiceEvent(event: any): Promise<void> {
+  private async handleContainerEvent(event: any): Promise<void> {
     try {
-      this.logger.debug("Received Docker event", {
+      this.logger.debug("Received Docker container event", {
         type: event.Type,
         action: event.Action,
         id: event.Actor.ID,
         actor: event.Actor,
       });
 
-      let labels, serviceName;
-
-      // Gérer les événements Swarm
-      if (event.Type === "service") {
-        try {
-          const service = await this.docker
-            .getService(event.Actor.ID)
-            .inspect();
-          labels = service.Spec?.Labels || {};
-          serviceName = service.Spec?.Name;
-          this.logger.debug("Service event details", {
-            serviceName,
-            labels,
-            spec: service.Spec,
-          });
-        } catch (error: any) {
-          // Ignorer silencieusement les erreurs Swarm en mode non-Swarm
-          if (error.message.includes("This node is not a swarm manager")) {
-            this.logger.debug("Ignoring Swarm event in non-Swarm mode");
-            return;
-          }
-          throw error;
-        }
+      // Only handle container events
+      if (event.Type !== "container") {
+        return;
       }
-      // Gérer les événements de conteneurs
-      else if (event.Type === "container") {
+
+      // For destroy events, we can't inspect the container
+      if (event.Action === "destroy" || event.Action === "die" || event.Action === "kill" || event.Action === "stop") {
+        const containerName = event.Actor.Attributes?.name || event.Actor.ID;
+        this.logger.debug("Container stopped/destroyed", {
+          containerName,
+          action: event.Action,
+        });
+        
+        // Emit removal event for DNS cleanup
+        this.emit("dns-remove", {
+          event: event.Action,
+          service: containerName,
+        });
+        return;
+      }
+
+      // For other events, inspect the container to get labels
+      try {
         const container = await this.docker
           .getContainer(event.Actor.ID)
           .inspect();
-        labels = container.Config?.Labels || {};
-        serviceName = container.Name.replace(/^\//, "");
+        const labels = container.Config?.Labels || {};
+        const containerName = container.Name.replace(/^\//, "");
+        
         this.logger.debug("Container event details", {
-          serviceName,
+          containerName,
           labels,
           state: container.State,
           status: container.State?.Status,
         });
-      }
 
-      if (labels && serviceName) {
         const dnsLabels = this.extractDNSLabels(labels);
         if (dnsLabels) {
           this.emit("dns-update", {
             event: event.Action,
-            service: serviceName,
+            service: containerName,
             labels: dnsLabels,
           });
         }
+      } catch (error: any) {
+        // Container might have been removed before we could inspect it
+        if (error.statusCode === 404) {
+          this.logger.debug("Container not found, likely already removed");
+          return;
+        }
+        throw error;
       }
     } catch (error) {
-      this.logger.error("Error handling event", { error });
+      this.logger.error("Error handling container event", { error });
     }
   }
 
@@ -198,7 +169,7 @@ export class DockerService extends EventEmitter {
     return hasDNSLabels ? dnsLabels : null;
   }
 
-  public getService(serviceName: string) {
-    return this.docker.getService(serviceName);
+  public getContainer(containerName: string) {
+    return this.docker.getContainer(containerName);
   }
 }
