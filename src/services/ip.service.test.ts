@@ -9,88 +9,212 @@ describe("IPService", () => {
 
   beforeEach(() => {
     ipService = IPService.getInstance();
+    // Reset singleton state
+    ipService["currentIPv4"] = null;
+    ipService["currentIPv6"] = null;
+    ipService["lastCheckIPv4"] = 0;
+    ipService["lastCheckIPv6"] = 0;
     jest.clearAllMocks();
   });
 
-  it("should fetch and cache public IP", async () => {
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } }) // ipify
-      .mockResolvedValueOnce({ data: "1.2.3.4" }); // ifconfig.me
+  describe("IPv4 Tests", () => {
+    it("should fetch IPv4 via Cloudflare trace endpoint", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=1.2.3.4\nts=1234567890\nuag=test\n",
+      });
 
-    const ip1 = await ipService.getPublicIP();
-    expect(ip1).toBe("1.2.3.4");
-    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+      const ip = await ipService.getPublicIPv4();
+      expect(ip).toBe("1.2.3.4");
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        "https://1.1.1.1/cdn-cgi/trace",
+        expect.objectContaining({
+          timeout: 5000,
+        })
+      );
+    });
 
-    // Should use cached value
-    const ip2 = await ipService.getPublicIP();
-    expect(ip2).toBe("1.2.3.4");
-    expect(mockedAxios.get).toHaveBeenCalledTimes(2);
+    it("should fallback to other providers if Cloudflare fails", async () => {
+      ipService["currentIPv4"] = null;
+      mockedAxios.get
+        .mockRejectedValueOnce(new Error("Cloudflare error")) // Cloudflare fails
+        .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } }) // ipify
+        .mockResolvedValueOnce({ data: "1.2.3.4" }); // ifconfig.me
+
+      const ip = await ipService.getPublicIPv4();
+      expect(ip).toBe("1.2.3.4");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(3);
+    });
+
+    it("should cache IPv4 address", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=1.2.3.4\nts=1234567890\n",
+      });
+
+      const ip1 = await ipService.getPublicIPv4();
+      expect(ip1).toBe("1.2.3.4");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+
+      // Should use cached value
+      const ip2 = await ipService.getPublicIPv4();
+      expect(ip2).toBe("1.2.3.4");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it("should throw error if fallback IPs don't match", async () => {
+      mockedAxios.get
+        .mockRejectedValueOnce(new Error("Cloudflare error"))
+        .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } })
+        .mockResolvedValueOnce({ data: "5.6.7.8" });
+
+      await expect(ipService.getPublicIPv4()).rejects.toThrow(
+        "IP addresses from different sources don't match"
+      );
+    });
   });
 
-  it("should throw error if IPs don't match", async () => {
-    ipService["currentIP"] = null; // Reset cache
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } })
-      .mockResolvedValueOnce({ data: "5.6.7.8" });
+  describe("IPv6 Tests", () => {
+    it("should fetch IPv6 via Cloudflare trace endpoint", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=2001:db8::1\nts=1234567890\nuag=test\n",
+      });
 
-    await expect(ipService.getPublicIP()).rejects.toThrow();
+      const ip = await ipService.getPublicIPv6();
+      expect(ip).toBe("2001:db8::1");
+      expect(mockedAxios.get).toHaveBeenCalledWith(
+        "https://[2606:4700:4700::1111]/cdn-cgi/trace",
+        expect.objectContaining({
+          timeout: 5000,
+        })
+      );
+    });
+
+    it("should cache IPv6 address", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=2001:db8::1\nts=1234567890\n",
+      });
+
+      const ip1 = await ipService.getPublicIPv6();
+      expect(ip1).toBe("2001:db8::1");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+
+      // Should use cached value
+      const ip2 = await ipService.getPublicIPv6();
+      expect(ip2).toBe("2001:db8::1");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(1);
+    });
+
+    it("should use cached IPv6 if fetch fails", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=2001:db8::1\nts=1234567890\n",
+      });
+
+      const ip1 = await ipService.getPublicIPv6();
+      expect(ip1).toBe("2001:db8::1");
+
+      // Subsequent failed fetch
+      mockedAxios.get.mockRejectedValue(new Error("Network error"));
+
+      const ip2 = await ipService.getPublicIPv6();
+      expect(ip2).toBe("2001:db8::1");
+    });
+
+    it("should throw error if no cached IPv6 and fetch fails", async () => {
+      mockedAxios.get.mockRejectedValue(new Error("Network error"));
+
+      await expect(ipService.getPublicIPv6()).rejects.toThrow(
+        "Network error"
+      );
+    });
+
+    it("should throw helpful error for IPv6 ENETUNREACH", async () => {
+      const netError: any = new Error("connect ENETUNREACH");
+      netError.code = "ENETUNREACH";
+      mockedAxios.get.mockRejectedValue(netError);
+
+      await expect(ipService.getPublicIPv6()).rejects.toThrow(
+        "IPv6 is not available in this Docker container"
+      );
+    });
   });
 
-  it("should use cached IP if fetch fails", async () => {
-    // First successful fetch
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } })
-      .mockResolvedValueOnce({ data: "1.2.3.4" });
+  describe("getPublicIP wrapper", () => {
+    it("should fetch IPv4 for type A", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=1.2.3.4\nts=1234567890\n",
+      });
 
-    const ip1 = await ipService.getPublicIP();
-    expect(ip1).toBe("1.2.3.4");
+      const ip = await ipService.getPublicIP("A");
+      expect(ip).toBe("1.2.3.4");
+    });
 
-    // Subsequent failed fetch
-    mockedAxios.get.mockRejectedValue(new Error("Network error"));
+    it("should fetch IPv6 for type AAAA", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=2001:db8::1\nts=1234567890\n",
+      });
 
-    const ip2 = await ipService.getPublicIP();
-    expect(ip2).toBe("1.2.3.4");
+      const ip = await ipService.getPublicIP("AAAA");
+      expect(ip).toBe("2001:db8::1");
+    });
+
+    it("should default to IPv4 if no type provided", async () => {
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=1.2.3.4\nts=1234567890\n",
+      });
+
+      const ip = await ipService.getPublicIP();
+      expect(ip).toBe("1.2.3.4");
+    });
   });
 
-  it("should throw error if no cached IP and fetch fails", async () => {
-    ipService["currentIP"] = null; // Reset cache
-    mockedAxios.get.mockRejectedValue(new Error("Network error"));
+  describe("Cache management", () => {
+    it("should maintain separate caches for IPv4 and IPv6", async () => {
+      mockedAxios.get
+        .mockResolvedValueOnce({
+          data: "ip=1.2.3.4\nts=1234567890\n",
+        })
+        .mockResolvedValueOnce({
+          data: "ip=2001:db8::1\nts=1234567890\n",
+        });
 
-    await expect(ipService.getPublicIP()).rejects.toThrow();
-  });
+      const ipv4 = await ipService.getPublicIPv4();
+      const ipv6 = await ipService.getPublicIPv6();
 
-  it("should handle different response formats", async () => {
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } }) // Object format
-      .mockResolvedValueOnce({ data: "1.2.3.4" }); // String format
+      expect(ipv4).toBe("1.2.3.4");
+      expect(ipv6).toBe("2001:db8::1");
 
-    const ip = await ipService.getPublicIP();
-    expect(ip).toBe("1.2.3.4");
-  });
+      // Both should be cached now
+      const ipv4Cached = await ipService.getPublicIPv4();
+      const ipv6Cached = await ipService.getPublicIPv6();
 
-  it("should refresh cache after timeout", async () => {
-    jest.useFakeTimers();
-    ipService["currentIP"] = null;
-    ipService["lastCheck"] = 0;
+      expect(ipv4Cached).toBe("1.2.3.4");
+      expect(ipv6Cached).toBe("2001:db8::1");
+      expect(mockedAxios.get).toHaveBeenCalledTimes(2); // Only initial fetches
+    });
 
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "1.2.3.4" } })
-      .mockResolvedValueOnce({ data: "1.2.3.4" });
+    it("should refresh cache after timeout", async () => {
+      jest.useFakeTimers();
+      ipService["currentIPv4"] = null;
+      ipService["lastCheckIPv4"] = 0;
 
-    const ip1 = await ipService.getPublicIP();
-    expect(ip1).toBe("1.2.3.4");
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=1.2.3.4\nts=1234567890\n",
+      });
 
-    jest.advanceTimersByTime(6 * 60 * 1000);
-    ipService["lastCheck"] = 0; // Force cache expiration
+      const ip1 = await ipService.getPublicIPv4();
+      expect(ip1).toBe("1.2.3.4");
 
-    mockedAxios.get
-      .mockResolvedValueOnce({ data: { ip: "5.6.7.8" } })
-      .mockResolvedValueOnce({ data: "5.6.7.8" });
+      jest.advanceTimersByTime(6 * 60 * 1000);
+      ipService["lastCheckIPv4"] = 0; // Force cache expiration
 
-    await Promise.resolve(); // Allow micro-tasks to complete
-    await Promise.resolve(); // Allow next micro-task queue
-    const ip2 = await ipService.getPublicIP();
-    expect(ip2).toBe("5.6.7.8");
-    jest.useRealTimers();
+      mockedAxios.get.mockResolvedValueOnce({
+        data: "ip=5.6.7.8\nts=1234567890\n",
+      });
+
+      await Promise.resolve();
+      await Promise.resolve();
+      const ip2 = await ipService.getPublicIPv4();
+      expect(ip2).toBe("5.6.7.8");
+      jest.useRealTimers();
+    });
   });
 });

@@ -24,6 +24,7 @@ A Node.js service that automatically manages DNS records in Cloudflare based on 
 - 🐳 Docker (standalone mode)
 - ☁️ Cloudflare account and API token with DNS edit permissions
 - 🔌 Access to Docker socket (read-only is sufficient)
+- 🌐 IPv6 enabled in Docker daemon (required only for AAAA records)
 
 ## 🚀 Installation
 
@@ -224,6 +225,27 @@ DNS_DEFAULT_RECORD_TYPE=CNAME
 DNS_DEFAULT_CONTENT=origin.domain.com
 DNS_DEFAULT_PROXIED=false
 DNS_DEFAULT_TTL=3600
+```
+
+### 🌐 IPv6 Support (AAAA Records)
+
+**Important**: To create AAAA (IPv6) records with automatic IP detection (`dns.cloudflare.content=public_ip` or without content), IPv6 must be enabled in the Docker daemon configuration.
+
+#### What happens without IPv6?
+
+- ✅ **A records** (IPv4) work normally
+- ⚠️ **AAAA records** (IPv6) will be skipped with a warning
+- ℹ️ Other DNS records for the same container continue to process normally
+
+#### Alternative: Use explicit IPv6 addresses
+
+You can specify the IPv6 address explicitly without enabling IPv6 in Docker:
+
+```yaml
+labels:
+  - "dns.cloudflare.hostname=api.domain.com"
+  - "dns.cloudflare.type=AAAA"
+  - "dns.cloudflare.content=2001:db8::1"
 ```
 
 ### 🔗 Traefik Integration

@@ -84,6 +84,8 @@ export class LabelValidator {
 
     // Gérer le contenu
     if (label.content !== undefined) {
+      // Allow "public_ip" keyword as a valid content value
+      // It will be resolved later by the DNSService based on the record type
       finalLabel.content = label.content;
     } else if (finalLabel.type === "CNAME") {
       this.logger.error(
@@ -91,6 +93,7 @@ export class LabelValidator {
       );
       return null;
     }
+    // For A and AAAA records without content, it will be resolved to public IP later
 
     // Gérer le TTL
     if (label.ttl !== undefined && !isNaN(label.ttl) && label.ttl > 0) {
@@ -100,9 +103,11 @@ export class LabelValidator {
     }
 
     // Validations spécifiques
+    // Allow "public_ip" keyword for AAAA records (will be resolved later)
     if (
       finalLabel.type === "AAAA" &&
       finalLabel.content &&
+      finalLabel.content !== "public_ip" &&
       !LabelValidator.isValidIPv6(finalLabel.content)
     ) {
       this.logger.error(

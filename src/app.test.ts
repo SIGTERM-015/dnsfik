@@ -45,6 +45,7 @@ describe("App", () => {
     mockDNSService = {
       getInstance: jest.fn().mockReturnThis(),
       handleServiceUpdate: jest.fn().mockResolvedValue(undefined),
+      checkAndUpdateIPAddresses: jest.fn().mockResolvedValue(undefined),
     } as any;
 
     (Logger.getInstance as jest.Mock).mockReturnValue(mockLogger);
@@ -77,6 +78,14 @@ describe("App", () => {
     );
     expect(mockLogger.info).toHaveBeenNthCalledWith(
       2,
+      "Starting IP monitoring",
+      expect.objectContaining({
+        intervalMs: expect.any(Number),
+        intervalMinutes: expect.any(Number),
+      })
+    );
+    expect(mockLogger.info).toHaveBeenNthCalledWith(
+      3,
       "Application started successfully"
     );
   });
